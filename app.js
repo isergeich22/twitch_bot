@@ -1,129 +1,188 @@
-require('dotenv').config()
-const axios = require('axios')
-const winston = require('winston')
+require('dotenv').config() // Загружаем переменные из файла .env
+const axios = require('axios') // Подключаем библиотеку для HTTP-запросов
+const fs = require('fs') // Подключаем модуль для работы с файловой системой
+const winston = require('winston') // Подключаем библиотеку для логирования
 
-const TWITCH_API_URL = 'https://api.twitch.tv/helix/streams'
-const TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
-const TELEGRAM_API_URL = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`
+// Константы API Twitch и Telegram
+const TWITCH_API_URL = 'https://api.twitch.tv/helix/streams' // URL для получения данных о трансляциях Twitch
+const TOKEN_URL = 'https://id.twitch.tv/oauth2/token' // URL для получения токена доступа Twitch
+const TELEGRAM_API_URL = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/`// URL Telegram Bot API с токеном из переменных оркужения
 
-let twitchAccessToken = null
-let lastStreamId = null
+// Переменные для хранения токена доступа, ID последней трансляции и имени файла последней трансляции
+let twitchAccessToken = null // Twitch Access Token
+let lastStreamFile = 'lastStreamId.txt' // Имя файла, где хранится ID последней трансляции
+let lastStreamId = null // ID последней трансляции
 
-const logger = winston.createLogger({
-    level: 'info',
-    format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}: ${message}]`)
-    ),
-    transports: [
-        new winston.transports.Console(),
-        new winston.transports.File({ filename: 'bot.log' })
-    ]
-})
+// Настройка логгера с использование библиотеки Winston
+const logger = winston.createLogger(
+    {
+        level: 'info', // Уровень логгирования (информационные сообщения)
+        format: winston.format.combine(
+            winston.format.timestamp(), // Добавляем временную метку к каждому сообщению
+            winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}: ${message}]`)
+        ),
+        transports: [
+            new winston.transports.Console(), // Логгирование в консоль
+            new winston.transports.File({ filename: 'bot.log' }) // Логгирование в .log файл
+        ]
+    },
+    {
+        level: 'error', // Дополнительный уровень логгирования (сообщения об ошибках)
+        format: winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}: ${message}]`)
+        ),
+        transports: [
+            new winston.transports.Console(),
+            new winston.transports.File({ filename: 'bot.log' })
+        ]
+    }
+)
 
-logger.info('Бот запущен')
+logger.info('Бот запущен') // Информируем о запуске бота через логгер
 
+// Асинхронная функция для получения Twitch Access Token
 async function getTwitchAccessToken() {
 
     try {
 
+        // Отправляем POST - запрос на получение Twitch Access Token
         const response = await axios.post(TOKEN_URL, null, {
             params: {
-                client_id: process.env.TWITCH_CLIENT_ID,
-                client_secret: process.env.TWITCH_CLIENT_SECRET,
-                grant_type: 'client_credentials'
+                client_id: process.env.TWITCH_CLIENT_ID, // ID клиента Twitch из переменных окружения
+                client_secret: process.env.TWITCH_CLIENT_SECRET, // Секретный ключ клиента Twitch из переменных окружения
+                grant_type: 'client_credentials' // Тип запроса для получения Twitch Access Token
             }
         })
 
+        // Сохраняем полученный токен в глобальной переменной
         twitchAccessToken = response.data.access_token
-        console.log('Новый Twitch Access Token получен')
+
+        // Информируем об успешном получении токена
+        logger.info('Новый Twitch Access Token получен')
 
     } catch(error) {
 
-        console.error('Ошибка при получении Twitch Access Token:', error.response ? error.response.data : error)
+        // Логгируем ошибку при неудачной попытке получения Twitch Access Token
+        logger.error('Ошибка при получении Twitch Access Token:', error.response ? error.response.data : error)
 
     }
 
 }
 
+// Функция для сохранения ID последней запущенной трансляции в файл
+function saveLastStreamId(streamId) {
+    fs.writeFileSync(lastStreamFile, lastStreamId, 'utf8')
+}
+
+// Функция для загрузки ID последней запущенной трансляции из файла
+function loadLastStreamId() {
+    if(fs.existsSync(lastStreamFile)) {
+        // Если файл существует, читаем его содержимое и удаляем лишние пробелы/переводы строк
+        return fs.readFileSync(lastStreamFile, 'utf8').trim()
+    }
+    return null // Если файл отсутствует, возвращаем null как признак отсутствия данных
+}
+
+// Асинхронная функция для проверки наличия активной трансляции
 async function checkStream() {
 
+    // Если Twitch Access token отсутствует, запрашиваем его с помощью заданной функции
     if(!twitchAccessToken) await getTwitchAccessToken()
 
     try {
 
+        // Отправляем GET - запрос на получение информации об активной трансляции
         const response = await axios.get(TWITCH_API_URL, {
             params: {
-                user_login: process.env.TWITCH_USERNAME
+                user_login: process.env.TWITCH_USERNAME // Имя пользователя Twitch из переменных оркужения
             },
             headers: {
-                'Client-ID': process.env.TWITCH_CLIENT_ID,
-                'Authorization': `Bearer ${twitchAccessToken}`
+                'Client-ID': process.env.TWITCH_CLIENT_ID, // ID пользователя Twitch из переменных окружения
+                'Authorization': `Bearer ${twitchAccessToken}` // Токен доступа из глобальной переменной
             }
         })
 
+        // Константа с ответом GET - запроса
         const streams = response.data.data
 
+        // Если активная трансляция отсутсвует, сообщаем об этом
         if(!streams || streams.length === 0) {
 
-            console.log('Стрим не найден. Ожидание стрима...')
-            lastStreamId = null
-            return
+            logger.info('Стрим не найден. Ожидание стрима...') // Информируем об отсутствии активной трансляции
+            lastStreamId = null // Присваиваем пустое значение глобальной переменной для ID трансляции
+            return // Завершаем выполнение асинхронной функции
 
         }
 
+        // Константа с информацией об активной трансляции
         const stream = streams[0]
 
-        console.log(stream)
-
+        // Константа с временной меткой начала трансляции
         const beginString = new Date(stream.started_at).toLocaleString('ru-RU', {
             timeZone: "Europe/Moscow"
         })
 
-        console.log(beginString)
-
+        // Деструктурированное преобразование строки с временной меткой в массив
         let [ date, time ] = beginString.split(',')
 
+        // Преобразование строки с датой в массив
         date = date.split('.')
 
+        // Формирование строки с датой в требуемом формате
         date = `${date[0]}/${date[1]}/${date[2]}`
-        time = time.slice(0, 5)
 
+        // Получение строки времени в требуемом формате
+        time = time.slice(0, 6)
+
+        // Константа с информацией о начале трансляции
         const createdAt = `${time} ${date}`        
 
+        // Если активная трансляция присутствует, переходим к проверке последнего ID трансляции в файле
         if(stream) {
+
+            lastStreamId = loadLastStreamId(lastStreamFile) // Присваиваем глобальной переменной значение из файла с ID
+
+            // Если ID не совпадают, запускаем формирование уведомления о появившейся трансляции
             if(stream.id !== lastStreamId) {
-                
-                lastStreamId = stream.id
+
+                logger.info('Новый стрим найден, отправляем уведомление...') // Информируем о появлении активной трансляции
+                lastStreamId = stream.id // Актуализируем значение ID активной трансляции в глобальной переменной
+                saveLastStreamId(lastStreamId) // Вызываем функцию сохранения нового ID активной трансляции в файл
+
+                // Константа с необходимой информацией об активной трансляции
                 const streamInfo = {
-                    username: process.env.TWITCH_USERNAME,
-                    title: stream.title,
-                    category: stream.game_name,
-                    startTime: createdAt,
-                    image: stream.thumbnail_url
-                        .replace('{width}', '1920')
-                        .replace('{height}', '1080'),
-                    viewers: stream.viewer_count
+                    username: process.env.TWITCH_USERNAME, // Имя пользователя Twitch из переменных окружения
+                    title: stream.title, // Название активной трансляции
+                    category: stream.game_name, // Категория (игра) активной трансляции
+                    startTime: createdAt, // Временная метка начала активной трансляции
+                    image: stream.thumbnail_url // Изображение активной трансляции
+                        .replace('{width}', '1920') // Указание корректной ширины изображения
+                        .replace('{height}', '1080'), // Указание корректной высоты изображения
+                    viewers: stream.viewer_count // Число зрителей активной трансляции
                 }
-                await sendTelegramMessage(streamInfo)
+                
+                await sendTelegramMessage(streamInfo) // Вызываем асинхронную функцию отправки уведомления в Telegram чат
+
+            } else {
+
+                 // Информируем об уже отправленном уведомлении
+                logger.info('Оповещение уже было отправлено')
 
             }
-        } else {
-            
-            lastStreamId = null
-
         }
 
     } catch(error) {
 
+        // Если попытка не удалась и статус ответа 401
         if(error.response && error.response.status === 401) {
 
-            console.log('Токен устарел, запрашиваем новый...')
-            await getTwitchAccessToken()
+            logger.info('Токен устарел, запрашиваем новый...') // Информируем об устаревании текущего Twitch Access Token
+            await getTwitchAccessToken() // Вызываем функцию получение актуального Twitch Access Token
 
         } else {
 
-            console.error('Ошибка при проверке стрима:', error.response ? error.response.data : error)
+            logger.error('Ошибка при проверке стрима:', error.response ? error.response.data : error) // Логгируем ошибку при проверке наличия актуальной трансляции
 
         }
 
@@ -131,64 +190,76 @@ async function checkStream() {
 
 }
 
+// Асинхронная функция отправки уведомления в Telegram - чат
 async function sendTelegramMessage(streamInfo) {
 
+    // Константа с HTML текстом уведомления
     const messages = `
     <b>[Twitch]</b> ${streamInfo.username} в сети!
-
     <b>Название:</b> ${streamInfo.title}
     <b>Категория:</b> ${streamInfo.category}
     <b>Начало:</b> ${streamInfo.startTime}
     <b>Зрителей:</b> ${streamInfo.viewers}
     `
 
+    // Константа с перенаправляющей кнопкой уведомления
     const keyboard = {
         inline_keyboard: [[
-            { text: "Смотреть стрим", url: `https://www.twitch.tv/${streamInfo.username}` }
+            { text: "Смотреть стрим!", url: `https://www.twitch.tv/${streamInfo.username}` }
         ]]
     }
 
     try {
 
-        const response = await axios.post(TELEGRAM_API_URL, {
+        // Отправляем POST - запрос для отправки уведомления в Telegram - чат
+        const response = await axios.post(`${TELEGRAM_API_URL}sendPhoto`, {
 
-            chat_id: `@${process.env.TELEGRAM_CHAT_ID}`,
-            photo: streamInfo.image,
-            text: messages,
-            parse_mode: "HTML",
-            reply_markup: JSON.stringify(keyboard)
+            chat_id: `@${process.env.TELEGRAM_CHAT_ID}`, // Название чата из переменных окружения
+            photo: streamInfo.image, // Изображение активной трансляции
+            caption: messages, // Подпись для уведомления об активной трансляции
+            parse_mode: "HTML", // Тип парсинга прикрепляемой подписи
+            reply_markup: { // Привязка кнопки с URL активной трансляции
+                inline_keyboard: [[
+                    { text: "Смотреть стрим!", url: `https://www.twitch.tv/${streamInfo.username}` }                    
+                ]]
+            }
 
         })
 
+        // Константа для хранения ID отправленного уведомления
         const messageId = response.data.result.message_id
 
+        // Установка таймера на удаление отправленного уведомления
         setTimeout(async () => {
 
             try {
                 
-                await axios.post(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/deleteMessage`, {
+                // Отправляем POST - запрос на удаление уведомления
+                await axios.post(`${TELEGRAM_API_URL}deleteMessage`, {
 
-                    chat_id: `@${process.env.TELEGRAM_CHAT_ID}`,
-                    message_id: messageId
+                    chat_id: `@${process.env.TELEGRAM_CHAT_ID}`, // Название чата из переменных окружения
+                    message_id: messageId // ID отправленного уведомления
 
                 })
 
-                console.log('Сообщение удалено')
+                logger.info('Сообщение удалено') // Информируем об успешном удалении уведомления
 
             } catch(error) {
 
-                console.error('Ошибка удаления сообщения:', error.response ? error.response.data : error)
+                logger.error('Ошибка удаления сообщения:', error.response ? error.response.data : error) // Логгируем ошибку при попытке удаления уведомления
 
             }
 
-        }, 300000)
+        }, 120000) // Устанавливаем таймер на 2 минуты
 
-        console.log('Оповещение отправлено!')
+        logger.info('Оповещение отправлено!') // Информируем об успешной отправке уведомления
 
     } catch(error) {
-        console.log('Ошибка отправки в Telegram:', error.response ? error.response.data : error)
+
+        logger.error('Ошибка отправки в Telegram:', error.response ? error.response.data : error) // Логгируем ошибку при попытке отправки уведомления
+
     }
     
 }
 
-setInterval(checkStream, 2 * 60 * 1000)
+setInterval(checkStream, 2 * 60 * 1000) // Устанавливаем интервал вызова функции проверки наличия активной трансляции
