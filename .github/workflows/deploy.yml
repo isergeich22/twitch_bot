@@ -22,7 +22,7 @@ jobs:
 
       - name: Деплой на сервер
         run: |
-          ssh root@91.210.169.42 << 'EOF'
+          ssh -T root@91.210.169.42 << 'EOF'
           cd ~/twitch_bot
           git pull origin main
           npm install
