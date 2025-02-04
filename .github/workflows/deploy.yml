@@ -1,0 +1,30 @@
+name: Deploy Twitch Bot
+
+on:
+  push: 
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout репозиторий
+        uses: actions/checkout@v3
+
+      - name: Настройка SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa.pub
+          chmod 600 ~/.ssh/id_rsa.pub
+          ssh-keyscan -H 91.210.169.42 >> ~/.ssh/known_hosts
+
+      - name: Деплой на сервер
+        run: |
+          ssh root@91.210.169.42 << 'EOF'
+          cd ~/twitch_bot
+          git pull origin main
+          npm install
+          pm2 restart twitch-bot || pm2 start app.js --name "twitch-bot"
+          EOF
