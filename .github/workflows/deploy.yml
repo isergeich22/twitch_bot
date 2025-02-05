@@ -1,30 +1,27 @@
 name: Deploy Twitch Bot
 
 on:
-  push: 
+  push:
     branches:
       - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout репозиторий
-        uses: actions/checkout@v3
+      - name: Checkout репозитория
+        uses: actions/checkout@v4
 
-      - name: Настройка SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/id_rsa.pub
-          chmod 600 ~/id_rsa.pub
-          ssh-keyscan -H 91.210.169.42 >> ~/.ssh/known_hosts
+      - name: Установка SSH-ключа
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Деплой на сервер
         run: |
-          ssh -T root@91.210.169.42 << 'EOF'
-          cd ~/twitch_bot
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_HOST }} << 'EOF'
+          cd deploy/twitch_bot
           git pull origin main
           npm install
-          pm2 restart twitch-bot || pm2 start app.js --name "twitch-bot"
+          pm2 restart twitch-bot || pm2 start app.js
           EOF
