@@ -20,7 +20,7 @@ jobs:
       - name: Деплой на сервер
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_HOST }} << 'EOF'
-          cd /twitch_bot
+          cd twitch_bot
           git pull origin main
           npm install
           pm2 restart twitch-bot || pm2 start app.js
