@@ -18,7 +18,17 @@ const logger = winston.createLogger(
     {
         level: 'info', // Уровень логгирования (информационные сообщения)
         format: winston.format.combine(
-            winston.format.timestamp(), // Добавляем временную метку к каждому сообщению
+            winston.format.timestamp({
+                format: () => new Intl.DateTimeFormat('ru-RU', {
+                    timeZone: 'Europe/Moscow',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }).format(new Date())
+            }), // Добавляем временную метку к каждому сообщению
             winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}: ${message}]`)
         ),
         transports: [
@@ -29,7 +39,17 @@ const logger = winston.createLogger(
     {
         level: 'error', // Дополнительный уровень логгирования (сообщения об ошибках)
         format: winston.format.combine(
-            winston.format.timestamp(),
+            winston.format.timestamp({
+                format: () => new Intl.DateTimeFormat('ru-RU', {
+                    timeZone: 'Europe/Moscow',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }).format(new Date())
+            }),
             winston.format.printf(({ timestamp, level, message }) => `${timestamp} [${level}: ${message}]`)
         ),
         transports: [
