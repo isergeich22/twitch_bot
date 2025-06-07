@@ -176,9 +176,7 @@ async function checkStream() {
                     title: stream.title, // Название активной трансляции
                     category: stream.game_name, // Категория (игра) активной трансляции
                     startTime: createdAt, // Временная метка начала активной трансляции
-                    image: stream.thumbnail_url // Изображение активной трансляции
-                        .replace('{width}', '1920') // Указание корректной ширины изображения
-                        .replace('{height}', '1080'), // Указание корректной высоты изображения
+                    image: fs.createReadStream('./BeginStream.png'), // Изображение активной трансляции
                     viewers: stream.viewer_count // Число зрителей активной трансляции
                 }
                 
