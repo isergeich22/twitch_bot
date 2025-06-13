@@ -1,5 +1,6 @@
 require('dotenv').config() // Загружаем переменные из файла .env
 const axios = require('axios') // Подключаем библиотеку для HTTP-запросов
+const formData = require('form-data') // Подключаем библиотеку для отправки файлов
 const fs = require('fs') // Подключаем модуль для работы с файловой системой
 const winston = require('winston') // Подключаем библиотеку для логирования
 
@@ -222,32 +223,32 @@ async function sendTelegramMessage(streamInfo) {
     <b>Зрителей:</b> ${streamInfo.viewers}
     `
 
-    // Константа с перенаправляющей кнопкой уведомления
-    const keyboard = {
-        inline_keyboard: [[
-            { text: "Смотреть стрим!", url: `https://www.twitch.tv/${streamInfo.username}` }
-        ]]
-    }
-
     try {
 
-        // Отправляем POST - запрос для отправки уведомления в Telegram - чат
-        const response = await axios.post(`${TELEGRAM_API_URL}sendPhoto`, {
+        const form = new formData()
 
-            chat_id: `@${process.env.TELEGRAM_CHAT_ID}`, // Название чата из переменных окружения
-            photo: streamInfo.image, // Изображение активной трансляции
-            caption: messages, // Подпись для уведомления об активной трансляции
-            parse_mode: "HTML", // Тип парсинга прикрепляемой подписи
-            reply_markup: { // Привязка кнопки с URL активной трансляции
-                inline_keyboard: [[
+        form.append('chat_id', process.env.TELEGRAM_CHAT_ID)
+        form.append('photo', fs.createReadStream('./BeginStream.png'))
+        form.append('caption', messages)
+        form.append('parse_mode', 'HTML')
+        form.append('reply_markup', JSON.stringify({
+            inline_keyboard: [[
                     { text: "Смотреть стрим!", url: `https://www.twitch.tv/${streamInfo.username}` }                    
                 ]]
-            }
+        }))
 
-        })
+        // Отправляем POST - запрос для отправки уведомления в Telegram - чат
+        const response = await axios.post(`${TELEGRAM_API_URL}sendPhoto`,
+            form,
+            {
+                headers: form.getHeaders()
+            }
+        )
 
         // Константа для хранения ID отправленного уведомления
         const messageId = response.data.result.message_id
+
+        console.log(messageId)
 
         // Установка таймера на удаление отправленного уведомления
         setTimeout(async () => {
@@ -257,7 +258,7 @@ async function sendTelegramMessage(streamInfo) {
                 // Отправляем POST - запрос на удаление уведомления
                 await axios.post(`${TELEGRAM_API_URL}deleteMessage`, {
 
-                    chat_id: `@${process.env.TELEGRAM_CHAT_ID}`, // Название чата из переменных окружения
+                    chat_id: process.env.TELEGRAM_CHAT_ID, // Название чата из переменных окружения
                     message_id: messageId // ID отправленного уведомления
 
                 })
@@ -266,16 +267,18 @@ async function sendTelegramMessage(streamInfo) {
 
             } catch(error) {
 
+                console.log(error)
                 logger.error('Ошибка удаления сообщения:', error.response ? error.response.data : error) // Логгируем ошибку при попытке удаления уведомления
 
             }
 
-        }, 18000000) // Устанавливаем таймер на 5 часов (средняя продолжительность трансляции)
+        }, 14400000) // Устанавливаем таймер на 4 часов (средняя продолжительность трансляции)
 
         logger.info('Оповещение отправлено!') // Информируем об успешной отправке уведомления
 
     } catch(error) {
 
+        console.log(error)
         logger.error('Ошибка отправки в Telegram:', error.response ? error.response.data : error) // Логгируем ошибку при попытке отправки уведомления
 
     }
