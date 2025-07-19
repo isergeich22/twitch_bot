@@ -227,7 +227,7 @@ async function sendTelegramMessage(streamInfo) {
 
         const form = new formData()
 
-        form.append('chat_id', process.env.TELEGRAM_CHAT_ID)
+        form.append('chat_id', `-${process.env.TELEGRAM_CHAT_ID}`)
         form.append('photo', fs.createReadStream('./BeginStream.png'))
         form.append('caption', messages)
         form.append('parse_mode', 'HTML')
@@ -258,7 +258,7 @@ async function sendTelegramMessage(streamInfo) {
                 // Отправляем POST - запрос на удаление уведомления
                 await axios.post(`${TELEGRAM_API_URL}deleteMessage`, {
 
-                    chat_id: process.env.TELEGRAM_CHAT_ID, // Название чата из переменных окружения
+                    chat_id: `-${process.env.TELEGRAM_CHAT_ID}`, // Название чата из переменных окружения
                     message_id: messageId // ID отправленного уведомления
 
                 })
