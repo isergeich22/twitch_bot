@@ -278,7 +278,7 @@ async function sendTelegramMessage(streamInfo) {
 
     } catch(error) {
 
-        console.log(error)
+        logger.error(`${error}`)
         logger.error('Ошибка отправки в Telegram:', error.response ? error.response.data : error) // Логгируем ошибку при попытке отправки уведомления
 
     }
